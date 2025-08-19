@@ -1,114 +1,69 @@
-# main.py
-from pathlib import Path
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+비플로우 주문리스트 → 지정한 셀러별 리포트(HTML, 결제일 기준) - 모듈화 버전
+- 3페이지 A4 컴팩트 레이아웃
+- 질문 기반 페이지 구성
+"""
 
-from .config import CONFIG
-from .fonts import select_korean_font
-from .constants import COL_PAYMENT_DATE, COL_ORDER_AMOUNT, COL_STATUS, COL_REFUND_FIELD
-from .utils import sanitize_filename
-from .dataio import load_main_sheet, resolve_sellers
-from .metrics import (
-    prepare_base, slice_seller, compute_kpis, channel_table,
-    daily_summary, heatmap_matrix, product_top, status_counts
-)
-from .report_html import render_report
-from .index_html import build_index_html
+from pathlib import Path
+from typing import List, Tuple
+
+from config import CONFIG
+from fonts import setup_korean_font
+from constants import COL_PAYMENT_DATE, COL_ORDER_AMOUNT, COL_SELLER
+from utils import sanitize_filename
+from file_manager import load_excel_data, determine_sellers, build_index_html
+from report_generator import generate_report_html
 
 def main():
-    # 폰트 세팅
-    select_korean_font()
+    """메인 실행 함수"""
+    # 폰트 설정
+    setup_korean_font()
+    
+    # 설정 값 로드
+    in_path = CONFIG["INPUT_XLSX"]
+    out_dir = Path(CONFIG["OUTPUT_DIR"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    start = CONFIG.get("START_DATE")
+    end = CONFIG.get("END_DATE")
+    wanted = CONFIG.get("SELLERS") or []
 
-    in_path  = CONFIG["INPUT_XLSX"]
-    out_dir  = Path(CONFIG["OUTPUT_DIR"]); out_dir.mkdir(parents=True, exist_ok=True)
-    start    = CONFIG.get("START_DATE")
-    end      = CONFIG.get("END_DATE")
-    wanted   = CONFIG.get("SELLERS") or []
-
-    df = load_main_sheet(in_path)
+    # 데이터 로드
+    df = load_excel_data(in_path)
+    
+    # 필수 컬럼 확인
     if COL_PAYMENT_DATE not in df.columns or COL_ORDER_AMOUNT not in df.columns:
         raise KeyError(f"필수 칼럼 부족: '{COL_PAYMENT_DATE}', '{COL_ORDER_AMOUNT}'")
 
-    # 기간 필터/전처리
-    base = prepare_base(df, start, end)
-
-    # 대상 셀러 집합
-    sellers = resolve_sellers(df, wanted)
-
-    # 인덱스 아이템
-    index_items: list[tuple[str, str]] = []
+    # 생성 대상 셀러 결정
+    sellers = determine_sellers(df, wanted)
+    
+    index_items: List[Tuple[str, str]] = []
 
     # 전체(합산) 리포트
     if CONFIG.get("BUILD_OVERALL_REPORT", True):
-        sdf = slice_seller(base, None)
-        kpi = compute_kpis(sdf, overall=base)
-        dmin, dmax = sdf["__dt__"].min(), sdf["__dt__"].max()
-        period_str = f"{dmin:%Y-%m-%d} ~ {dmax:%Y-%m-%d}" if (dmin is not None and dmax is not None) else "기간 정보 없음"
-
-        ch_tbl = channel_table(sdf)
-        daily  = daily_summary(sdf)
-        hmtx   = heatmap_matrix(sdf)
-        ptop   = product_top(sdf)
-        st_df  = status_counts(sdf)
-
-        html = render_report(
-            seller_title="전체",
-            period_str=period_str,
-            kpi=kpi,
-            ch_tbl=ch_tbl,
-            daily=daily,
-            heat_arr_tuple=hmtx,
-            prod_top=ptop,
-            status_df=st_df,
-            cols_hint=(COL_STATUS, COL_REFUND_FIELD),
-        )
-        fname = f"seller_report_전체_{dmin:%Y-%m-%d}_{dmax:%Y-%m-%d}.html" if (dmin is not None and dmax is not None) else "seller_report_전체.html"
+        html, dmin, dmax = generate_report_html(df, seller_name=None, start=start, end=end)
+        fname = f"seller_report_전체_{dmin}_{dmax}.html"
         (out_dir / fname).write_text(html, encoding="utf-8")
-        index_items.append(("전체", fname))
+        index_items.insert(0, ("전체", fname))
         print(f"✔ Saved: {out_dir / fname}")
 
-    # 지정 셀러 리포트
+    # 지정 셀러들 생성
     for s in sellers:
-        if s == "전체":
-            continue
-        if s not in df.get("입점사명", [] if df.empty else df["입점사명"].astype(str).unique()):
+        if COL_SELLER in df.columns and s not in df[COL_SELLER].astype(str).unique():
             print(f"⚠️  스킵: '{s}'는 데이터에 없음")
             continue
-
-        sdf = slice_seller(base, s)
-        if sdf.empty:
-            print(f"⚠️  스킵: '{s}'는 기간 필터에 데이터가 없음")
-            continue
-
-        kpi = compute_kpis(sdf, overall=base)
-        dmin, dmax = sdf["__dt__"].min(), sdf["__dt__"].max()
-        period_str = f"{dmin:%Y-%m-%d} ~ {dmax:%Y-%m-%d}" if (dmin is not None and dmax is not None) else "기간 정보 없음"
-
-        ch_tbl = channel_table(sdf)
-        daily  = daily_summary(sdf)
-        hmtx   = heatmap_matrix(sdf)
-        ptop   = product_top(sdf)
-        st_df  = status_counts(sdf)
-
-        html = render_report(
-            seller_title=s,
-            period_str=period_str,
-            kpi=kpi,
-            ch_tbl=ch_tbl,
-            daily=daily,
-            heat_arr_tuple=hmtx,
-            prod_top=ptop,
-            status_df=st_df,
-            cols_hint=(COL_STATUS, COL_REFUND_FIELD),
-        )
-        safe = sanitize_filename(s)
-        fname = f"seller_report_{safe}_{dmin:%Y-%m-%d}_{dmax:%Y-%m-%d}.html" if (dmin is not None and dmax is not None) else f"seller_report_{safe}.html"
+        
+        html, dmin, dmax = generate_report_html(df, seller_name=s, start=start, end=end)
+        fname = f"seller_report_{sanitize_filename(s)}_{dmin}_{dmax}.html"
         (out_dir / fname).write_text(html, encoding="utf-8")
         index_items.append((s, fname))
         print(f"✔ Saved: {out_dir / fname}")
 
-    # 인덱스 생성
+    # 인덱스 페이지
     if CONFIG.get("BUILD_INDEX", True) and index_items:
-        title = CONFIG.get("INDEX_TITLE", "셀러 리포트 인덱스")
-        idx_html = build_index_html(title, index_items)
+        idx_html = build_index_html("셀러 리포트 인덱스", index_items)
         (out_dir / "index.html").write_text(idx_html, encoding="utf-8")
         print(f"✔ Saved: {out_dir / 'index.html'}")
 

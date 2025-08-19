@@ -1,7 +1,10 @@
 # fonts.py
+"""한글 폰트 설정"""
+
 from matplotlib import rcParams, font_manager
 
-def select_korean_font() -> None:
+def setup_korean_font():
+    """한글 폰트 자동 선택"""
     candidates = [
         "Apple SD Gothic Neo",  # macOS
         "AppleGothic",          # macOS
