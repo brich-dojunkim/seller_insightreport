@@ -3,15 +3,15 @@
 
 import math
 import pandas as pd
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple
 from utils import format_currency, pct, df_to_html_table
-from charts import make_bar, make_pie, make_line, make_heatmap
+from charts import make_bar_cached, make_pie_cached, make_line_cached, make_heatmap
 from data_processor import *
 
 def _build_html_template(seller_title, period_str, kpis, customers_str, repurchase_str, 
                         lead_ship_str, lead_deliv_str, daily_img, images, ch_table_html, 
                         prod_table_html, heatmap_img, status_img):
-    """HTML 템플릿 생성"""
+    """HTML 템플릿 생성 (중복 제거)"""
     return f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -135,83 +135,82 @@ def generate_report_html(
     start: Optional[str] = None,
     end: Optional[str] = None,
 ) -> Tuple[str, str, str]:
-    """컴팩트 HTML 리포트 생성"""
+    """컴팩트 HTML 리포트 생성 (개선된 에러 처리)"""
     
-    # 필수 컬럼 점검
-    for col in [COL_PAYMENT_DATE, COL_ORDER_AMOUNT]:
-        if col not in df.columns:
-            raise KeyError(f"필수 칼럼이 없습니다: {col}")
+    try:
+        # 데이터 전처리
+        dfp = prepare_dataframe(df, start, end)
+        sdf = slice_by_seller(dfp, seller_name)
+        
+        # 기간 문자열
+        dmin, dmax = sdf["__dt__"].min(), sdf["__dt__"].max()
+        period_str = f"{dmin:%Y-%m-%d} ~ {dmax:%Y-%m-%d}" if pd.notna(dmin) and pd.notna(dmax) else "기간 정보 없음"
+        
+        # KPI 계산
+        kpis = calculate_kpis(sdf, dfp)
+        
+        # 분석 데이터
+        ch_tbl = get_channel_analysis(sdf)
+        daily = get_daily_trend(sdf)
+        heat_data = get_heatmap_data(sdf)
+        prod_top = get_product_analysis(sdf)
+        status_data = get_status_analysis(sdf)
+        
+        # 차트 생성 (캐시 사용)
+        images = {}
+        
+        if not ch_tbl.empty:
+            ch_top = ch_tbl.head(6)
+            images["channel_bar"] = make_bar_cached(
+                ch_top.index.astype(str), ch_top["orders"].values,
+                "채널별 주문수", rotation=30
+            )
+            images["channel_pie"] = make_pie_cached(
+                ch_top.index.astype(str), ch_top["revenue"].values,
+                "채널별 매출 비중"
+            )
 
-    # 데이터 전처리
-    dfp = prepare_dataframe(df, start, end)
-    sdf = slice_by_seller(dfp, seller_name)
-    
-    # 기간 문자열
-    dmin, dmax = sdf["__dt__"].min(), sdf["__dt__"].max()
-    period_str = f"{dmin:%Y-%m-%d} ~ {dmax:%Y-%m-%d}" if pd.notna(dmin) and pd.notna(dmax) else "기간 정보 없음"
-    
-    # KPI 계산
-    kpis = calculate_kpis(sdf, dfp)
-    
-    # 분석 데이터
-    ch_tbl = get_channel_analysis(sdf)
-    daily = get_daily_trend(sdf)
-    heat_data = get_heatmap_data(sdf)
-    prod_top = get_product_analysis(sdf)
-    status_data = get_status_analysis(sdf)
-    
-    # 차트 생성
-    images = {}
-    
-    if not ch_tbl.empty:
-        ch_top = ch_tbl.head(6)
-        images["channel_bar"] = make_bar(
-            ch_top.index.astype(str), ch_top["orders"].values,
-            "채널별 주문수", rotation=30
+        daily_img = ""
+        if not daily.empty:
+            daily_img = make_line_cached(
+                daily.iloc[:,0].astype(str), daily["revenue"].values,
+                "일자별 매출 추이"
+            )
+
+        heatmap_img = ""
+        if heat_data[0] is not None:
+            heat_arr, xlabels, ylabels = heat_data
+            heatmap_img = make_heatmap(heat_arr, xlabels, ylabels, "요일×시간 매출 패턴")
+
+        status_img = ""
+        if not status_data.empty:
+            status_img = make_bar_cached(
+                status_data["status"].head(8).values, 
+                status_data["count"].head(8).values,
+                "주문상태 분포", rotation=30
+            )
+
+        # 테이블 HTML
+        ch_table_html = df_to_html_table(ch_tbl.reset_index().rename(columns={COL_CHANNEL: "채널"})) if not ch_tbl.empty else "<div>-</div>"
+        prod_table_html = df_to_html_table(prod_top.rename(columns={COL_ITEM_NAME: "상품"})) if not prod_top.empty else "<div>-</div>"
+
+        # 셀러 타이틀
+        seller_title = seller_name or "전체"
+
+        # KPI 값들을 미리 포맷팅
+        customers_str = f"{int(kpis['unique_customers']):,}" if not math.isnan(kpis['unique_customers']) else "-"
+        repurchase_str = pct(kpis['repurchase_rate']) if not math.isnan(kpis['repurchase_rate']) else "-"
+        lead_ship_str = f"{kpis['lead_ship']:.1f}일" if not math.isnan(kpis['lead_ship']) else "-"
+        lead_deliv_str = f"{kpis['lead_deliv']:.1f}일" if not math.isnan(kpis['lead_deliv']) else "-"
+
+        # HTML 생성
+        html = _build_html_template(
+            seller_title, period_str, kpis, customers_str, repurchase_str,
+            lead_ship_str, lead_deliv_str, daily_img, images, ch_table_html,
+            prod_table_html, heatmap_img, status_img
         )
-        images["channel_pie"] = make_pie(
-            ch_top.index.astype(str), ch_top["revenue"].values,
-            "채널별 매출 비중"
-        )
-
-    daily_img = ""
-    if not daily.empty:
-        daily_img = make_line(
-            daily.iloc[:,0].astype(str), daily["revenue"].values,
-            "일자별 매출 추이"
-        )
-
-    heatmap_img = ""
-    if heat_data[0] is not None:
-        heat_arr, xlabels, ylabels = heat_data
-        heatmap_img = make_heatmap(heat_arr, xlabels, ylabels, "요일×시간 매출 패턴")
-
-    status_img = ""
-    if not status_data.empty:
-        status_img = make_bar(
-            status_data["status"].head(8).values, 
-            status_data["count"].head(8).values,
-            "주문상태 분포", rotation=30
-        )
-
-    # 테이블 HTML
-    ch_table_html = df_to_html_table(ch_tbl.reset_index().rename(columns={COL_CHANNEL: "채널"})) if not ch_tbl.empty else "<div>-</div>"
-    prod_table_html = df_to_html_table(prod_top.rename(columns={COL_ITEM_NAME: "상품"})) if not prod_top.empty else "<div>-</div>"
-
-    # 셀러 타이틀
-    seller_title = seller_name or "전체"
-
-    # KPI 값들을 미리 포맷팅
-    customers_str = f"{int(kpis['unique_customers']):,}" if not math.isnan(kpis['unique_customers']) else "-"
-    repurchase_str = pct(kpis['repurchase_rate']) if not math.isnan(kpis['repurchase_rate']) else "-"
-    lead_ship_str = f"{kpis['lead_ship']:.1f}일" if not math.isnan(kpis['lead_ship']) else "-"
-    lead_deliv_str = f"{kpis['lead_deliv']:.1f}일" if not math.isnan(kpis['lead_deliv']) else "-"
-
-    # HTML 생성
-    html = _build_html_template(
-        seller_title, period_str, kpis, customers_str, repurchase_str,
-        lead_ship_str, lead_deliv_str, daily_img, images, ch_table_html,
-        prod_table_html, heatmap_img, status_img
-    )
+        
+        return html, (f"{dmin:%Y-%m-%d}" if pd.notna(dmin) else "NA"), (f"{dmax:%Y-%m-%d}" if pd.notna(dmax) else "NA")
     
-    return html, (f"{dmin:%Y-%m-%d}" if pd.notna(dmin) else "NA"), (f"{dmax:%Y-%m-%d}" if pd.notna(dmax) else "NA")
+    except Exception as e:
+        raise RuntimeError(f"리포트 생성 실패: {e}")
