@@ -20,8 +20,23 @@ COL_REFUND_FIELD   = "클레임"     # H열
 COL_SHIP_DATE      = "발송처리일"
 COL_DELIVERED_DATE = "배송완료일"
 
-# 고객
+# 고객 (기존)
 COL_CUSTOMER       = "구매자아이디"
+
+# 고객 식별용 (신규 추가)
+COL_BUYER_NAME     = "구매자명"
+COL_BUYER_PHONE    = "구매자연락처"
+
+# 지역
+COL_ADDRESS        = "배송지"
+COL_POSTAL_CODE    = "우편번호"
+
+# 카테고리
+COL_CATEGORY       = "상품 카테고리"
+
+# 정산
+COL_SETTLEMENT     = "정산금액"
+COL_PRODUCT_PRICE  = "상품가격"
 
 # 환불/취소 키워드
 REFUND_REGEX_OPEN  = r"(?:환불|취소|반품|refund|cancel)"

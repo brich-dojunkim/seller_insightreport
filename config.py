@@ -3,7 +3,7 @@
 
 CONFIG = {
     # 입력 엑셀 경로
-    "INPUT_XLSX": "/Users/brich/Desktop/seller_insightreport/order_list_20250818120157_497.xlsx",
+    "INPUT_XLSX": "/Users/brich/Desktop/seller_insightreport/files/order_list_20250818120157_497.xlsx",
     # 출력 폴더 (없으면 생성)
     "OUTPUT_DIR": "./reports",
     # 기간 필터 (결제일 기준). None이면 전체 사용
