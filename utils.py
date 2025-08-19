@@ -1,9 +1,13 @@
-# utils/formatting.py
-"""포맷팅 유틸리티 함수들"""
+# utils.py
+"""통합 유틸리티 모듈 - 순수 유틸리티만 포함"""
 
 import math
 import pandas as pd
 from typing import Optional
+
+# ================================
+# 포맷팅 함수들
+# ================================
 
 def format_currency(v):
     """통화 포맷"""

@@ -1,5 +1,5 @@
-# utils/category_mapping.py
-"""카테고리 매핑 유틸리티 함수들"""
+# data_processing/transformers/category_transformer.py
+"""카테고리 매핑 변환기"""
 
 import pandas as pd
 from typing import Optional, Dict
@@ -8,11 +8,25 @@ from pathlib import Path
 # 전역 카테고리 매핑 캐시
 _category_mapping_cache = None
 
-def load_category_mapping(csv_path: str = "/Users/brich/Desktop/seller_insightreport/files/brich_category_250407.csv") -> Dict[str, str]:
+def load_category_mapping(csv_path: Optional[str] = None) -> Dict[str, str]:
     """카테고리 매핑 파일 로드 및 캐시"""
     global _category_mapping_cache
     
     if _category_mapping_cache is not None:
+        return _category_mapping_cache
+    
+    # 경로 우선순위: 1) 파라미터 2) 설정파일
+    if csv_path is None:
+        try:
+            from config import CONFIG
+            csv_path = CONFIG.get('CATEGORY_MAPPING_PATH')
+        except:
+            pass
+    
+    if csv_path is None or not Path(csv_path).exists():
+        print(f"⚠️ 카테고리 매핑 파일을 찾을 수 없음: {csv_path}")
+        print(f"    config.py에서 CATEGORY_MAPPING_PATH를 확인하세요.")
+        _category_mapping_cache = {}
         return _category_mapping_cache
     
     try:
@@ -33,7 +47,8 @@ def load_category_mapping(csv_path: str = "/Users/brich/Desktop/seller_insightre
         
     except Exception as e:
         print(f"⚠️ 카테고리 매핑 파일 로드 실패: {e}")
-        return {}
+        _category_mapping_cache = {}
+        return _category_mapping_cache
 
 def map_category_code_to_name(category_code, mapping: Optional[Dict[str, str]] = None) -> str:
     """카테고리 코드를 한글명으로 변환"""
@@ -57,3 +72,11 @@ def map_category_code_to_name(category_code, mapping: Optional[Dict[str, str]] =
     
     # 매핑에서 찾지 못한 경우 원본 반환
     return f"미분류_{code_str}"
+
+def apply_category_mapping(category_series: pd.Series) -> pd.Series:
+    """카테고리 Series에 매핑 적용"""
+    mapping = load_category_mapping()
+    if not mapping:
+        return category_series
+    
+    return category_series.apply(lambda x: map_category_code_to_name(x, mapping))

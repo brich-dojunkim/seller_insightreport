@@ -1,10 +1,13 @@
 # data_processing/validation.py
-"""데이터 검증 및 전처리 모듈"""
+"""데이터 검증 및 전처리 모듈 - import 경로 수정"""
 
 import pandas as pd
 from typing import Optional
 from constants import *
-from utils import to_datetime_safe, to_number_safe, create_customer_id, extract_region_from_address
+from .transformers import (
+    to_datetime_safe, to_number_safe, create_customer_id, 
+    extract_region_from_address, apply_category_mapping
+)
 
 def validate_dataframe(df: pd.DataFrame) -> None:
     """데이터프레임 유효성 검사"""
@@ -17,7 +20,7 @@ def validate_dataframe(df: pd.DataFrame) -> None:
         raise KeyError(f"필수 컬럼이 없습니다: {missing_cols}")
 
 def prepare_dataframe(df: pd.DataFrame, start: Optional[str], end: Optional[str]) -> pd.DataFrame:
-    """데이터프레임 전처리 (고객 식별 로직 포함)"""
+    """데이터프레임 전처리"""
     validate_dataframe(df)
     
     # 필요한 컬럼만 선택
@@ -29,6 +32,8 @@ def prepare_dataframe(df: pd.DataFrame, start: Optional[str], end: Optional[str]
     available_cols = [col for col in needed_cols if col in df.columns]
     
     dfp = df[available_cols].copy()
+    
+    # 기본 데이터 변환
     dfp["__dt__"] = to_datetime_safe(dfp[COL_PAYMENT_DATE])
     dfp["__amount__"] = to_number_safe(dfp[COL_ORDER_AMOUNT])
     dfp["__qty__"] = to_number_safe(dfp[COL_QTY]) if COL_QTY in dfp.columns else 1
@@ -44,6 +49,10 @@ def prepare_dataframe(df: pd.DataFrame, start: Optional[str], end: Optional[str]
     # 지역 정보 추출
     if COL_ADDRESS in dfp.columns:
         dfp["__region__"] = extract_region_from_address(dfp[COL_ADDRESS])
+
+    # 카테고리 매핑 적용
+    if COL_CATEGORY in dfp.columns:
+        dfp["__category_mapped__"] = apply_category_mapping(dfp[COL_CATEGORY])
 
     # 유효 데이터만
     dfp = dfp[dfp["__dt__"].notna() & dfp["__amount__"].notna()]

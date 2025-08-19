@@ -1,5 +1,5 @@
-# utils/customer_identification.py
-"""고객 식별 유틸리티 함수들"""
+# data_processing/transformers/customer_transformer.py
+"""고객 식별 변환기"""
 
 import pandas as pd
 import hashlib
