@@ -1,6 +1,7 @@
 """엑셀 출력기"""
 
 import pandas as pd
+import re
 from datetime import datetime
 from pathlib import Path
 from .base_exporter import BaseExporter
@@ -8,7 +9,10 @@ from .writers import (
     DashboardWriter, SalesWriter, CustomerWriter,
     OperationsWriter, BenchmarkingWriter, TrendsWriter
 )
-from utils import sanitize_filename
+
+def sanitize_filename(filename):
+    """파일명에서 특수문자 제거"""
+    return re.sub(r'[<>:"/\\|?*]', '_', filename)
 
 class ExcelExporter(BaseExporter):
     """엑셀 출력기"""
@@ -25,7 +29,7 @@ class ExcelExporter(BaseExporter):
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
         try:
-            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
                 
                 # 1. 대시보드 요약
                 dashboard_writer = DashboardWriter(self.analysis_data, self.kpis)

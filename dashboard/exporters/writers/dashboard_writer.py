@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-from utils import format_currency
+from dashboard.utils.excel_formatter import ExcelFormatter, format_basic_metrics
 
 class DashboardWriter:
     """대시보드 요약 시트 작성"""
@@ -22,18 +22,21 @@ class DashboardWriter:
         title_df.to_excel(writer, sheet_name='대시보드요약', startrow=current_row, index=False, header=False)
         current_row += 2
         
-        seller_info = pd.DataFrame([
+        seller_info_data = [
             ['셀러명', basic_info['seller_name']],
             ['분석기간', f"{basic_info['period_start']} ~ {basic_info['period_end']}"],
             ['분석일시', basic_info['analysis_date']],
-            ['총 분석일수', f"{basic_info['total_days']}일"],
+            ['총 분석일수', basic_info['total_days']],
             ['주력카테고리', basic_info.get('main_category', 'N/A')],
-            ['카테고리 점유율', f"{basic_info.get('main_category_share', 0):.1f}%"],
+            ['카테고리 점유율', basic_info.get('main_category_share', 0)],
             ['카테고리 순위', f"{basic_info.get('category_rank', 'N/A')}/{basic_info.get('category_total_sellers', 'N/A')}"],
-            ['시장점유율', f"{basic_info.get('market_share', 0):.1f}%"]
-        ], columns=['구분', '값'])
+            ['시장점유율', basic_info.get('market_share', 0)]
+        ]
         
-        seller_info.to_excel(writer, sheet_name='대시보드요약', startrow=current_row, index=False)
+        seller_info = pd.DataFrame(seller_info_data, columns=['구분', '값'])
+        
+        # 자동 포맷팅 적용
+        format_basic_metrics(seller_info, '대시보드요약', writer, current_row)
         current_row += len(seller_info) + 3
         
         # B. KPI 스코어카드
@@ -43,7 +46,15 @@ class DashboardWriter:
         
         kpi_scorecard = self._create_kpi_scorecard()
         kpi_df = pd.DataFrame(kpi_scorecard, columns=['지표', '현재값', '카테고리대비', '등급'])
-        kpi_df.to_excel(writer, sheet_name='대시보드요약', startrow=current_row, index=False)
+        
+        # KPI에 대한 커스텀 포맷
+        kpi_formats = {
+            '현재값': 'auto',  # 자동 감지
+            '카테고리대비': 'float2'
+        }
+        
+        formatter = ExcelFormatter(writer.book)
+        formatter.detect_and_format_dataframe(kpi_df, '대시보드요약', writer, current_row)
         current_row += len(kpi_df) + 3
         
         # C. 성과 점수
@@ -59,10 +70,14 @@ class DashboardWriter:
         }
         
         scores_df = pd.DataFrame(list(performance_scores.items()), columns=['영역', '점수'])
-        scores_df.to_excel(writer, sheet_name='대시보드요약', startrow=current_row, index=False)
+        
+        # 점수 포맷
+        score_formats = {'점수': 'float1'}
+        formatter.apply_formats_to_dataframe_by_columns(scores_df, score_formats, '대시보드요약', writer, current_row)
+    
     
     def _create_kpi_scorecard(self):
-        """KPI 스코어카드 생성"""
+        """KPI 스코어카드 생성 - 숫자 값 유지"""
         kpi_scorecard = []
         
         kpi_mapping = {
@@ -79,27 +94,20 @@ class DashboardWriter:
             vs_category = self.kpis.get(vs_key, np.nan)
             
             if not pd.isna(current_value):
-                # 값 포맷팅
-                if '금액' in kpi_name or '매출' in kpi_name:
-                    formatted_value = format_currency(current_value)
-                elif '율' in kpi_name:
-                    formatted_value = f"{current_value*100:.1f}%"
-                elif '시간' in kpi_name:
-                    formatted_value = f"{current_value:.1f}일"
-                else:
-                    formatted_value = f"{current_value:,.0f}"
+                # 값 그대로 유지 (숫자)
+                formatted_value = float(current_value)
                 
                 # 상대 성과
                 if not pd.isna(vs_category):
                     is_inverse = any(word in kpi_name for word in ['취소', '시간', '지연'])
                     if is_inverse:
-                        relative_perf = f"{(1-vs_category)*100:+.1f}%"
+                        relative_perf = float(1 - vs_category)
                         grade = self._get_performance_grade(vs_category, 'cancel')
                     else:
-                        relative_perf = f"{(vs_category-1)*100:+.1f}%"
+                        relative_perf = float(vs_category - 1)
                         grade = self._get_performance_grade(vs_category, 'normal')
                 else:
-                    relative_perf = "N/A"
+                    relative_perf = np.nan
                     grade = "N/A"
                 
                 kpi_scorecard.append([kpi_name, formatted_value, relative_perf, grade])

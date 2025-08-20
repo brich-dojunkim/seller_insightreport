@@ -1,7 +1,7 @@
 """매출 분석 시트 작성기"""
 
 import pandas as pd
-from utils import format_currency
+from dashboard.utils.excel_formatter import format_basic_metrics, smart_format_dataframe
 
 class SalesWriter:
     """매출 분석 시트 작성"""
@@ -21,14 +21,7 @@ class SalesWriter:
             current_row += 2
             
             basic_df = pd.DataFrame(list(self.sales_data['basic_metrics'].items()), columns=['지표', '값'])
-            # 값 포맷팅
-            for idx, row in basic_df.iterrows():
-                if '매출' in row['지표'] or '금액' in row['지표']:
-                    basic_df.loc[idx, '값'] = format_currency(row['값'])
-                elif '수' in row['지표']:
-                    basic_df.loc[idx, '값'] = f"{row['값']:,.0f}"
-            
-            basic_df.to_excel(writer, sheet_name='매출분석', startrow=current_row, index=False)
+            format_basic_metrics(basic_df, '매출분석', writer, current_row)
             current_row += len(basic_df) + 3
         
         # B. 채널별 매출 분석
@@ -38,7 +31,7 @@ class SalesWriter:
             current_row += 2
             
             channel_df = self.sales_data['channel_analysis'].reset_index()
-            channel_df.to_excel(writer, sheet_name='매출분석', startrow=current_row, index=False)
+            smart_format_dataframe(channel_df, '매출분석', writer, current_row)
             current_row += len(channel_df) + 3
         
         # C. 상품별 매출 TOP 20
@@ -48,7 +41,7 @@ class SalesWriter:
             current_row += 2
             
             product_df = self.sales_data['product_analysis'].reset_index()
-            product_df.to_excel(writer, sheet_name='매출분석', startrow=current_row, index=False)
+            smart_format_dataframe(product_df, '매출분석', writer, current_row)
             current_row += len(product_df) + 3
         
         # D. 시간대별 매출 패턴
@@ -58,7 +51,7 @@ class SalesWriter:
             current_row += 2
             
             hourly_df = self.sales_data['hourly_pattern'].reset_index()
-            hourly_df.to_excel(writer, sheet_name='매출분석', startrow=current_row, index=False)
+            smart_format_dataframe(hourly_df, '매출분석', writer, current_row)
             current_row += len(hourly_df) + 3
         
         # E. 요일별 매출 패턴
@@ -68,4 +61,4 @@ class SalesWriter:
             current_row += 2
             
             daily_df = self.sales_data['daily_pattern'].reset_index()
-            daily_df.to_excel(writer, sheet_name='매출분석', startrow=current_row, index=False)
+            smart_format_dataframe(daily_df, '매출분석', writer, current_row)

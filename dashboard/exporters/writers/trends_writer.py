@@ -1,6 +1,7 @@
 """트렌드 분석 시트 작성기"""
 
 import pandas as pd
+from dashboard.utils.excel_formatter import smart_format_dataframe
 
 class TrendsWriter:
     """트렌드 분석 시트 작성"""
@@ -20,7 +21,7 @@ class TrendsWriter:
             current_row += 2
             
             monthly_df = self.trends_data['monthly_trend'].reset_index()
-            monthly_df.to_excel(writer, sheet_name='트렌드분석', startrow=current_row, index=False)
+            smart_format_dataframe(monthly_df, '트렌드분석', writer, current_row)
             current_row += len(monthly_df) + 3
         
         # B. 주별 트렌드
@@ -30,7 +31,7 @@ class TrendsWriter:
             current_row += 2
             
             weekly_df = self.trends_data['weekly_trend'].reset_index()
-            weekly_df.to_excel(writer, sheet_name='트렌드분석', startrow=current_row, index=False)
+            smart_format_dataframe(weekly_df, '트렌드분석', writer, current_row)
             current_row += len(weekly_df) + 3
         
         # C. 일별 트렌드 (최근 30일)
@@ -40,4 +41,4 @@ class TrendsWriter:
             current_row += 2
             
             daily_df = self.trends_data['daily_trend'].reset_index()
-            daily_df.to_excel(writer, sheet_name='트렌드분석', startrow=current_row, index=False)
+            smart_format_dataframe(daily_df, '트렌드분석', writer, current_row)

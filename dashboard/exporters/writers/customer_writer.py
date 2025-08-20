@@ -1,7 +1,7 @@
 """고객 분석 시트 작성기"""
 
 import pandas as pd
-from utils import format_currency
+from dashboard.utils.excel_formatter import format_basic_metrics, smart_format_dataframe
 
 class CustomerWriter:
     """고객 분석 시트 작성"""
@@ -26,16 +26,7 @@ class CustomerWriter:
             current_row += 2
             
             basic_df = pd.DataFrame(list(self.customers_data['basic_metrics'].items()), columns=['지표', '값'])
-            # 값 포맷팅
-            for idx, row in basic_df.iterrows():
-                if '율' in row['지표']:
-                    basic_df.loc[idx, '값'] = f"{row['값']:.1f}%"
-                elif '가치' in row['지표']:
-                    basic_df.loc[idx, '값'] = format_currency(row['값'])
-                else:
-                    basic_df.loc[idx, '값'] = f"{row['값']:,.1f}"
-            
-            basic_df.to_excel(writer, sheet_name='고객분석', startrow=current_row, index=False)
+            format_basic_metrics(basic_df, '고객분석', writer, current_row)
             current_row += len(basic_df) + 3
         
         # B. 고객 세그먼트 분석 (퍼센타일 기반)
@@ -45,7 +36,7 @@ class CustomerWriter:
             current_row += 2
             
             segment_df = self.customers_data['segment_analysis'].reset_index()
-            segment_df.to_excel(writer, sheet_name='고객분석', startrow=current_row, index=False)
+            smart_format_dataframe(segment_df, '고객분석', writer, current_row)
             current_row += len(segment_df) + 3
         
         # C. 지역별 고객 분석
@@ -55,7 +46,7 @@ class CustomerWriter:
             current_row += 2
             
             region_df = self.customers_data['region_analysis'].reset_index()
-            region_df.to_excel(writer, sheet_name='고객분석', startrow=current_row, index=False)
+            smart_format_dataframe(region_df, '고객분석', writer, current_row)
             current_row += len(region_df) + 3
         
         # D. 고객 생애주기 분석
@@ -65,4 +56,4 @@ class CustomerWriter:
             current_row += 2
             
             lifecycle_df = self.customers_data['lifecycle_analysis']
-            lifecycle_df.to_excel(writer, sheet_name='고객분석', startrow=current_row, index=False)
+            smart_format_dataframe(lifecycle_df, '고객분석', writer, current_row)
