@@ -1,8 +1,8 @@
-"""대시보드 요약 시트 작성기"""
+"""대시보드 요약 시트 작성기 - 수정된 버전"""
 
 import pandas as pd
 import numpy as np
-from dashboard.utils.excel_formatter import ExcelFormatter, format_basic_metrics
+from dashboard.utils.excel_formatter import ExcelFormatter, smart_format_dataframe
 
 class DashboardWriter:
     """대시보드 요약 시트 작성"""
@@ -28,15 +28,19 @@ class DashboardWriter:
             ['분석일시', basic_info['analysis_date']],
             ['총 분석일수', basic_info['total_days']],
             ['주력카테고리', basic_info.get('main_category', 'N/A')],
-            ['카테고리 점유율', basic_info.get('main_category_share', 0)],
+            ['카테고리 점유율', basic_info.get('main_category_share', 0) / 100],  # 퍼센트 값을 0~1 범위로 변환
             ['카테고리 순위', f"{basic_info.get('category_rank', 'N/A')}/{basic_info.get('category_total_sellers', 'N/A')}"],
-            ['시장점유율', basic_info.get('market_share', 0)]
+            ['시장점유율', basic_info.get('market_share', 0) / 100]  # 퍼센트 값을 0~1 범위로 변환
         ]
         
         seller_info = pd.DataFrame(seller_info_data, columns=['구분', '값'])
         
-        # 자동 포맷팅 적용
-        format_basic_metrics(seller_info, '대시보드요약', writer, current_row)
+        # 커스텀 포맷 매핑 사용
+        seller_info_formats = {
+            '값': 'auto'  # 자동 감지하되 커스텀 매핑 우선 적용
+        }
+        
+        smart_format_dataframe(seller_info, '대시보드요약', writer, current_row, seller_info_formats)
         current_row += len(seller_info) + 3
         
         # B. KPI 스코어카드
@@ -47,14 +51,14 @@ class DashboardWriter:
         kpi_scorecard = self._create_kpi_scorecard()
         kpi_df = pd.DataFrame(kpi_scorecard, columns=['지표', '현재값', '카테고리대비', '등급'])
         
-        # KPI에 대한 커스텀 포맷
+        # KPI 스코어카드 전용 포맷 매핑
         kpi_formats = {
             '현재값': 'auto',  # 자동 감지
-            '카테고리대비': 'float2'
+            '카테고리대비': 'float2',
+            '등급': 'text'
         }
         
-        formatter = ExcelFormatter(writer.book)
-        formatter.detect_and_format_dataframe(kpi_df, '대시보드요약', writer, current_row)
+        smart_format_dataframe(kpi_df, '대시보드요약', writer, current_row, kpi_formats)
         current_row += len(kpi_df) + 3
         
         # C. 성과 점수
@@ -73,11 +77,10 @@ class DashboardWriter:
         
         # 점수 포맷
         score_formats = {'점수': 'float1'}
-        formatter.apply_formats_to_dataframe_by_columns(scores_df, score_formats, '대시보드요약', writer, current_row)
-    
+        smart_format_dataframe(scores_df, '대시보드요약', writer, current_row, score_formats)
     
     def _create_kpi_scorecard(self):
-        """KPI 스코어카드 생성 - 숫자 값 유지"""
+        """KPI 스코어카드 생성 - 값 정규화 포함"""
         kpi_scorecard = []
         
         kpi_mapping = {
@@ -94,8 +97,15 @@ class DashboardWriter:
             vs_category = self.kpis.get(vs_key, np.nan)
             
             if not pd.isna(current_value):
-                # 값 그대로 유지 (숫자)
-                formatted_value = float(current_value)
+                # 값 정규화
+                if kpi_name in ['재구매율', '취소율']:
+                    # 퍼센트 값을 0~1 범위로 변환
+                    if current_value > 1:
+                        formatted_value = current_value / 100
+                    else:
+                        formatted_value = current_value
+                else:
+                    formatted_value = float(current_value)
                 
                 # 상대 성과
                 if not pd.isna(vs_category):
